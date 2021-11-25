@@ -1,0 +1,6 @@
+[submodule "zdb"]
+	path = zdb
+	url = http://github.com/mjoerussell/zdb
+[submodule "SDL.zig"]
+	path = SDL.zig
+	url = https://github.com/MasterQ32/SDL.zig.git
