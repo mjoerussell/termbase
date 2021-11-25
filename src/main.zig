@@ -15,29 +15,23 @@ pub fn main() anyerror!void {
     _ = sdl_ttf.TTF_Init();
     defer sdl_ttf.TTF_Quit();
 
-    var inconsolata_font: *sdl_ttf.TTF_Font = sdl_ttf.TTF_OpenFont("fonts\\Inconsolata-g.ttf", 12) orelse {
-        const font_error = sdl_ttf.TTF_GetError();
-        std.debug.print("Font open failed: {s}\n", .{font_error});
-        return error.FontOpenFailed;
-    };
-    defer sdl_ttf.TTF_CloseFont(inconsolata_font);
+    var font = try sdl_ttf.Font.openFont("fonts\\Inconsolata-g.ttf", 12);
+    defer font.destroy();
 
-    var text_surface_native = sdl_ttf.TTF_RenderText_Shaded(inconsolata_font, "Sample Text!!!", .{ .r = 255, .g = 255, .b = 255, .a = 255 }, .{ .r = 0, .g = 0, .b = 0, .a = 0 });
+    var text_buffer = std.ArrayList(u8).init(std.heap.c_allocator);
+    defer text_buffer.deinit();
 
-    const text_surface = sdl.Surface{
-        .ptr = @ptrCast(*sdl.c.SDL_Surface, text_surface_native),
-    };
-    defer text_surface.destroy();
-
-    const text_texture = try sdl.createTextureFromSurface(renderer, text_surface);
-    defer text_texture.destroy();
-
-    // const text_rect = sdl.Rectangle{ .x = 0, .y = 0, .width = 200, .height = 100 };
+    var writer = text_buffer.writer();
 
     main_loop: while (true) {
         while (sdl.pollEvent()) |ev| {
             switch (ev) {
                 .quit => break :main_loop,
+                .text_input => |text_input_ev| {
+                    // @note This is a hack, definitely broken
+                    // std.debug.print("{s}\n", .{text_input_ev.text});
+                    writer.print("{c}", .{text_input_ev.text[0]}) catch {};
+                },
                 else => {},
             }
         }
@@ -45,7 +39,18 @@ pub fn main() anyerror!void {
         try renderer.setColorRGB(0x00, 0x00, 0x00);
         try renderer.clear();
 
-        try renderer.copy(text_texture, sdl.Rectangle{ .x = 0, .y = 0, .width = 200, .height = 25 }, null);
+        if (text_buffer.items.len > 0) {
+            const text_surface = try font.renderTextShaded(text_buffer.items, sdl.Color.white, sdl.Color.black);
+            defer text_surface.destroy();
+
+            const text_texture = try sdl.createTextureFromSurface(renderer, text_surface);
+            defer text_texture.destroy();
+
+            const text_size = font.sizeText(text_buffer.items);
+
+            try renderer.copy(text_texture, sdl.Rectangle{ .x = 100, .y = 50, .width = text_size.width, .height = text_size.height }, null);
+        }
+
         renderer.present();
     }
 }
