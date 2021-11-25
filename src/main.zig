@@ -29,8 +29,21 @@ pub fn main() anyerror!void {
                 .quit => break :main_loop,
                 .text_input => |text_input_ev| {
                     // @note This is a hack, definitely broken
-                    // std.debug.print("{s}\n", .{text_input_ev.text});
                     writer.print("{c}", .{text_input_ev.text[0]}) catch {};
+                    if (text_buffer.allocatedSlice().len > text_buffer.items.len - 1) {
+                        text_buffer.items.ptr[text_buffer.items.len + 1] = 0;
+                    }
+                },
+                .key_down => |key_ev| {
+                    switch (key_ev.keycode) {
+                        .@"return" => {
+                            writer.writeAll("\n") catch {};
+                            if (text_buffer.allocatedSlice().len > text_buffer.items.len - 1) {
+                                text_buffer.items.ptr[text_buffer.items.len + 1] = 0;
+                            }
+                        },
+                        else => {},
+                    }
                 },
                 else => {},
             }
