@@ -1,10 +1,37 @@
 const std = @import("std");
 const sdl = @import("sdl2");
 const sdl_ttf = @import("sdl_ttf.zig");
+const zdb = @import("zdb");
+
+const OdbcTestType = struct {
+    id: u32,
+    name: []const u8,
+    occupation: []const u8,
+    age: u32,
+
+    fn deinit(self: *OdbcTestType, allocator: *Allocator) void {
+        allocator.free(self.name);
+        allocator.free(self.occupation);
+    }
+};
 
 pub fn main() anyerror!void {
     try sdl.init(.{ .video = true, .events = true });
     defer sdl.quit();
+
+    const allocator = std.heap.c_allocator;
+
+    var connection_info = try ConnectionInfo.initWithConfig(allocator, .{ .driver = "PostgreSQL Unicode(x64)", .dsn = "PostgreSQL35W" });
+    defer connection_info.deinit();
+
+    const connection_string = try connection_info.toConnectionString(allocator);
+    defer allocator.free(connection_string);
+
+    var connection = try DBConnection.initWithConnectionString(connection_string);
+    defer connection.deinit();
+
+    var cursor = try connection.getCursor(allocator);
+    defer cursor.deinit() catch {};
 
     var window = try sdl.createWindow("SDL Test", .{ .centered = {} }, .{ .centered = {} }, 640, 480, .{ .shown = true });
     defer window.destroy();
@@ -34,7 +61,15 @@ pub fn main() anyerror!void {
                 .key_down => |key_ev| {
                     switch (key_ev.keycode) {
                         .@"return" => {
-                            writer.writeAll("\n") catch {};
+                            if (key_ev.modifiers.get(.left_control) or key_ev.modifiers.get(.right_control)) {
+                                var result_set = try cursor.executeDirect(OdbcTestType, .{}, text_buffer.items);
+                                while (result_set.next()) |*item| {
+                                    writer.print("{} | {s} | {s} | {}\n", .{ item.id, item.name, item.occupation, item.age });
+                                    item.deinit(allocator);
+                                }
+                            } else {
+                                writer.writeAll("\n") catch {};
+                            }
                         },
                         .tab => {
                             writer.writeAll("  ") catch {};
