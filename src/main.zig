@@ -15,7 +15,7 @@ pub fn main() anyerror!void {
     _ = sdl_ttf.TTF_Init();
     defer sdl_ttf.TTF_Quit();
 
-    var font = try sdl_ttf.Font.openFont("fonts\\Inconsolata-g.ttf", 12);
+    var font = try sdl_ttf.Font.openFont(renderer, "fonts\\Inconsolata-g.ttf", 12);
     defer font.destroy();
 
     var text_buffer = std.ArrayList(u8).init(std.heap.c_allocator);
@@ -30,17 +30,14 @@ pub fn main() anyerror!void {
                 .text_input => |text_input_ev| {
                     // @note This is a hack, definitely broken
                     writer.print("{c}", .{text_input_ev.text[0]}) catch {};
-                    if (text_buffer.allocatedSlice().len > text_buffer.items.len - 1) {
-                        text_buffer.items.ptr[text_buffer.items.len + 1] = 0;
-                    }
                 },
                 .key_down => |key_ev| {
                     switch (key_ev.keycode) {
                         .@"return" => {
                             writer.writeAll("\n") catch {};
-                            if (text_buffer.allocatedSlice().len > text_buffer.items.len - 1) {
-                                text_buffer.items.ptr[text_buffer.items.len + 1] = 0;
-                            }
+                        },
+                        .tab => {
+                            writer.writeAll("  ") catch {};
                         },
                         else => {},
                     }
@@ -53,15 +50,7 @@ pub fn main() anyerror!void {
         try renderer.clear();
 
         if (text_buffer.items.len > 0) {
-            const text_surface = try font.renderTextShaded(text_buffer.items, sdl.Color.white, sdl.Color.black);
-            defer text_surface.destroy();
-
-            const text_texture = try sdl.createTextureFromSurface(renderer, text_surface);
-            defer text_texture.destroy();
-
-            const text_size = font.sizeText(text_buffer.items);
-
-            try renderer.copy(text_texture, sdl.Rectangle{ .x = 100, .y = 50, .width = text_size.width, .height = text_size.height }, null);
+            try font.drawText(renderer, text_buffer.items, 100, 50);
         }
 
         renderer.present();
