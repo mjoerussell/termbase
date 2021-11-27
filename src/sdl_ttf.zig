@@ -66,7 +66,8 @@ pub const Font = struct {
         font.texture.destroy();
     }
 
-    pub fn drawText(font: Font, renderer: sdl.Renderer, text: []const u8, x: c_int, y: c_int) error{SdlError}!void {
+    pub fn drawText(font: Font, renderer: sdl.Renderer, text: []const u8, x: c_int, y: c_int) error{SdlError}!sdl.Rectangle {
+        var result_rect = std.mem.zeroes(sdl.Rectangle);
         var render_x = x;
         var render_y = y;
         var previous_glyph = std.mem.zeroes(sdl.Rectangle);
@@ -88,13 +89,18 @@ pub const Font = struct {
                         render_y += previous_glyph.height;
                         render_x = x;
                     },
-                    '\t' => {
-                        try font.drawText(renderer, "  ", render_x, render_y);
-                    },
                     else => {},
                 }
             }
+            if (render_x > result_rect.x) {
+                result_rect.x = render_x;
+            }
+            if (render_y >= result_rect.y) {
+                result_rect.y = render_y + previous_glyph.height;
+            }
         }
+
+        return result_rect;
     }
 
     fn getGlyph(font: Font, character: u8) ?sdl.Rectangle {
