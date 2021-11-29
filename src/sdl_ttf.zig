@@ -132,7 +132,17 @@ pub const Font = struct {
         var width: c_int = 0;
         var height: c_int = 0;
 
-        _ = c.TTF_SizeText(font.ptr, text.ptr, &width, &height);
-        return .{ .x = 0, .y = 0, .width = width, .height = height };
+        var unchecked_ptr = @intToPtr(?[*]u8, @ptrToInt(text.ptr));
+        if (unchecked_ptr) |ptr| {
+            var old_sentinel = ptr[text.len];
+            ptr[text.len] = 0;
+
+            // _ = c.TTF_SizeText(font.ptr, text.ptr, &width, &height);
+            _ = c.TTF_SizeText(font.ptr, ptr, &width, &height);
+            ptr[text.len] = old_sentinel;
+            return .{ .x = 0, .y = 0, .width = width, .height = height };
+        } else {
+            return .{ .x = 0, .y = 0, .width = 0, .height = 0 };
+        }
     }
 };
