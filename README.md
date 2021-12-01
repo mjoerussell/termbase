@@ -3,6 +3,18 @@
 Termbase is a database scratchpad. It's intended to enable quick exploration of databases without
 requiring heavyweight database consoles or editors.
 
+## Getting Started
+
+First, clone this repository and all submodules with the following command:
+
+```sh
+git clone --recursive https://github.com/mjoerussell/termbase
+```
+
+Next, follow the setup instructions for [SDL.zig](https://github.com/MasterQ32/SDL.zig/tree/0b9a4d73fced0cd3d713a8ff3ad67c27a6507abd) and [zdb](https://github.com/mjoerussell/zdb/tree/d15066fe1e3d209564aeb0093101d497ad482f0f).
+
+Once you've installed an ODBC driver and SDL2, you should be able to start Termbase by running `zig build run`.
+
 ## Controls
 
 | Key Combo                | Effect                                                                                             |
