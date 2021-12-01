@@ -3,4 +3,4 @@
 	url = http://github.com/mjoerussell/zdb
 [submodule "SDL.zig"]
 	path = SDL.zig
-	url = https://github.com/MasterQ32/SDL.zig.git
+	url = https://github.com/mjoerussell/SDL.zig.git

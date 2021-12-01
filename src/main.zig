@@ -18,16 +18,13 @@ pub fn main() anyerror!void {
     try sdl.init(.{ .video = true, .events = true });
     defer sdl.quit();
 
-    const allocator = std.heap.c_allocator;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+
+    var allocator = gpa.allocator();
 
     // @info Change this to update your DB connection info
-    var connection_info = try zdb.ConnectionInfo.initWithConfig(allocator, .{ .driver = "PostgreSQL Unicode(x64)", .dsn = "PostgreSQL35W" });
-    defer connection_info.deinit();
-
-    const connection_string = try connection_info.toConnectionString(allocator);
-    defer allocator.free(connection_string);
-
-    var connection = try zdb.DBConnection.initWithConnectionString(connection_string);
+    var connection = try zdb.DBConnection.init("PostgreSQL35W", "postgres", "postgres");
     defer connection.deinit();
 
     try connection.setCommitMode(.auto);

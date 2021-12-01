@@ -22,7 +22,7 @@ pub const TextArea = struct {
 
     child: ?*TextArea = null,
 
-    pub fn init(allocator: *Allocator, x: c_int, y: c_int) TextArea {
+    pub fn init(allocator: Allocator, x: c_int, y: c_int) TextArea {
         return TextArea{
             .buffer = std.ArrayList(u8).init(allocator),
             .rect = sdl.Rectangle{
@@ -48,7 +48,7 @@ pub const TextArea = struct {
 
     /// Create a new `TextArea` directly below this current one. Does **not** set this text area's `child`
     /// field to the new text area - that must be done by the caller. 
-    pub fn spawnChild(text_area: *TextArea, allocator: *Allocator) TextArea {
+    pub fn spawnChild(text_area: *TextArea, allocator: Allocator) TextArea {
         return TextArea.init(allocator, text_area.rect.x, text_area.rect.y + text_area.rect.height);
     }
 
