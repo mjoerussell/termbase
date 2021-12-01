@@ -12,6 +12,7 @@ const TextArea = @import("text_area.zig").TextArea;
 // * Set up arbitrary db connections
 // * Multiple modes - text/command/query
 // * Properly space columns
+// * Render more glyphs outside of ' ' - 'z' range
 
 pub fn main() anyerror!void {
     try sdl.init(.{ .video = true, .events = true });
@@ -19,6 +20,7 @@ pub fn main() anyerror!void {
 
     const allocator = std.heap.c_allocator;
 
+    // @info Change this to update your DB connection info
     var connection_info = try zdb.ConnectionInfo.initWithConfig(allocator, .{ .driver = "PostgreSQL Unicode(x64)", .dsn = "PostgreSQL35W" });
     defer connection_info.deinit();
 
@@ -68,6 +70,8 @@ pub fn main() anyerror!void {
                 .mouse_button_down => |mb_ev| {
                     if (mb_ev.button == sdl.c.SDL_BUTTON_LEFT) {
                         if (!mouse_is_held) {
+                            // On a left click, if the button is not being held, active a text area or create a new text area if the
+                            // mouse is not hovering over any existing text area
                             mouse_is_held = true;
                             for (text_areas.items) |*ta| {
                                 if (ta.isInside(mb_ev.x, mb_ev.y)) {
@@ -85,6 +89,9 @@ pub fn main() anyerror!void {
                 },
                 .mouse_motion => |mm_ev| {
                     if (mouse_is_held) {
+                        // When dragging the mouse, move the current active text area to a new position
+                        // @fixme Creating a new text area, not releasing the mouse button, and dragging seems to create a
+                        //        bunch of text areas that eventually black out the screen.
                         if (active_text_area) |ta| {
                             ta.rect.x += mm_ev.xrel;
                             ta.rect.y += mm_ev.yrel;
@@ -96,89 +103,96 @@ pub fn main() anyerror!void {
                         var writer = ta.writer();
                         switch (key_ev.keycode) {
                             .@"return" => {
-                                if (key_ev.modifiers.get(.left_control) or key_ev.modifiers.get(.right_control)) {
-                                    defer cursor.close() catch {};
+                                if (!key_ev.modifiers.get(.left_control) and !key_ev.modifiers.get(.right_control)) {
+                                    // Handle regular enter => input newline
+                                    writer.writeAll("\n") catch {};
+                                    continue;
+                                }
 
-                                    if (ta.child) |result_ta| {
-                                        active_text_area = result_ta;
-                                        active_text_area.?.clear();
-                                    } else {
-                                        var child_ta = ta.spawnChild(allocator);
-                                        try text_areas.append(child_ta);
-                                        active_text_area = &text_areas.items[text_areas.items.len - 1];
-                                        ta.child = active_text_area;
+                                // Handle Ctrl+Enter => Evaluate cell
+                                defer cursor.close() catch {};
+
+                                if (ta.child) |result_ta| {
+                                    active_text_area = result_ta;
+                                    active_text_area.?.clear();
+                                } else {
+                                    var child_ta = ta.spawnChild(allocator);
+                                    try text_areas.append(child_ta);
+                                    active_text_area = &text_areas.items[text_areas.items.len - 1];
+                                    ta.child = active_text_area;
+                                }
+
+                                var result_writer = active_text_area.?.writer();
+
+                                var result_set = cursor.executeDirect(ta.buffer.items, .{}) catch {
+                                    const diag_recs = cursor.getErrors();
+                                    defer cursor.allocator.free(diag_recs);
+
+                                    for (diag_recs) |*rec, rec_index| {
+                                        result_writer.writeAll(rec.error_message) catch {};
+                                        if (rec_index < diag_recs.len - 1) {
+                                            result_writer.writeAll("\n") catch {};
+                                        }
+                                        rec.deinit(cursor.allocator);
                                     }
+                                    continue;
+                                };
 
-                                    var result_writer = active_text_area.?.writer();
+                                var row_iter = try result_set.rowIterator();
+                                defer row_iter.deinit();
 
-                                    var result_set = cursor.executeDirect(ta.buffer.items, .{}) catch {
-                                        const diag_recs = cursor.getErrors();
-                                        defer cursor.allocator.free(diag_recs);
+                                var first_row = true;
+                                while (true) {
+                                    var next_row = row_iter.next() catch continue;
+                                    var row = next_row orelse break;
 
-                                        for (diag_recs) |*rec, rec_index| {
-                                            result_writer.writeAll(rec.error_message) catch {};
-                                            if (rec_index < diag_recs.len - 1) {
-                                                result_writer.writeAll("\n") catch {};
-                                            }
-                                            rec.deinit(cursor.allocator);
-                                        }
-                                        continue;
-                                    };
-
-                                    var row_iter = try result_set.rowIterator();
-                                    defer row_iter.deinit();
-
-                                    var first_row = true;
-                                    while (true) {
-                                        var next_row = row_iter.next() catch continue;
-                                        var row = next_row orelse break;
-
-                                        if (first_row) {
-                                            // First time around, print the column headings
-                                            for (row.columns) |column, column_index| {
-                                                result_writer.print("{s}", .{column.name}) catch {};
-                                                if (column_index == row.columns.len - 1) {
-                                                    result_writer.writeAll("\n") catch {};
-                                                } else {
-                                                    result_writer.writeAll(" | ") catch {};
-                                                }
-                                            }
-                                            first_row = false;
-                                        }
-
-                                        var column_index: usize = 1;
-                                        while (column_index <= row.columns.len) : (column_index += 1) {
-                                            row.printColumnAtIndex(column_index, .{}, result_writer) catch {};
-                                            if (column_index == row.columns.len) {
+                                    if (first_row) {
+                                        // First time around, print the column headings
+                                        for (row.columns) |column, column_index| {
+                                            result_writer.print("{s}", .{column.name}) catch {};
+                                            if (column_index == row.columns.len - 1) {
                                                 result_writer.writeAll("\n") catch {};
                                             } else {
                                                 result_writer.writeAll(" | ") catch {};
                                             }
                                         }
+                                        first_row = false;
                                     }
-                                } else {
-                                    writer.writeAll("\n") catch {};
+
+                                    var column_index: usize = 1;
+                                    while (column_index <= row.columns.len) : (column_index += 1) {
+                                        row.printColumnAtIndex(column_index, .{}, result_writer) catch {};
+                                        if (column_index == row.columns.len) {
+                                            result_writer.writeAll("\n") catch {};
+                                        } else {
+                                            result_writer.writeAll(" | ") catch {};
+                                        }
+                                    }
                                 }
                             },
                             .tab => {
                                 if (key_ev.modifiers.get(.left_control) or key_ev.modifiers.get(.right_control)) {
                                     if (key_ev.modifiers.get(.left_shift) or key_ev.modifiers.get(.right_shift)) {
+                                        // Handle Ctrl+Shift+Tab => navigate to cell parent
                                         for (text_areas.items) |*other_ta| {
                                             if (other_ta.child != null and other_ta.child.? == ta) {
                                                 active_text_area = other_ta;
                                             }
                                         }
                                     } else {
+                                        // Handle Ctrl+Tab => navigate to cell child
                                         if (ta.child) |child| {
                                             active_text_area = child;
                                         }
                                     }
                                 } else {
+                                    // Handle regular tab => input 2 spaces @todo Make configurable (?)
                                     writer.writeAll("  ") catch {};
                                 }
                             },
                             .d => {
                                 if (key_ev.modifiers.get(.left_control) or key_ev.modifiers.get(.right_control)) {
+                                    // Handle Ctrl+D => Duplicate cell
                                     var ta_dup = TextArea.init(allocator, ta.rect.x + ta.rect.width + 10, ta.rect.y);
                                     ta_dup.writer().writeAll(ta.buffer.items) catch {};
 

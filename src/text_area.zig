@@ -6,6 +6,9 @@ const sdl = @import("sdl2");
 const sdl_ttf = @import("sdl_ttf.zig");
 const Font = sdl_ttf.Font;
 
+// @todo Resizable text areas via mouse
+// @todo Scrolling text areas?
+
 pub const TextArea = struct {
     // Custom writer that handles writing at the current cursor position and moving the cursor
     // without having to handle that outside of the TextArea context
@@ -43,10 +46,14 @@ pub const TextArea = struct {
         text_area.buffer.deinit();
     }
 
+    /// Create a new `TextArea` directly below this current one. Does **not** set this text area's `child`
+    /// field to the new text area - that must be done by the caller. 
     pub fn spawnChild(text_area: *TextArea, allocator: *Allocator) TextArea {
         return TextArea.init(allocator, text_area.rect.x, text_area.rect.y + text_area.rect.height);
     }
 
+    /// Render the current text area + text content at the current position. The text area will be sized according
+    /// to the size of its text.
     pub fn render(text_area: *TextArea, renderer: sdl.Renderer, font: Font, active: bool) !void {
         try renderer.setColorRGBA(255, 255, 255, 255);
 
@@ -87,11 +94,11 @@ pub const TextArea = struct {
             else
                 last_newline_index;
 
+            // Determine the width of the text between the cursor and the start of the line that the cursor is on
             const text_newline_to_cursor_size = font.sizeText(text_to_cursor[size_start_index..]);
             const cursor_x = text_area.rect.x + text_newline_to_cursor_size.width + text_area.cursor.width;
             const cursor_y = text_area.rect.y + (text_to_cursor_size.height * newline_count_to_cursor) + 2;
 
-            try renderer.setColorRGBA(255, 255, 255, 255);
             try renderer.fillRect(sdl.Rectangle{
                 .x = cursor_x,
                 .y = cursor_y,
@@ -101,10 +108,12 @@ pub const TextArea = struct {
         }
     }
 
+    /// Determine if the given (x,y) coordinate is inside this text area.
     pub fn isInside(text_area: TextArea, x: c_int, y: c_int) bool {
         return x >= text_area.rect.x and x <= text_area.rect.x + text_area.rect.width and y >= text_area.rect.y and y <= text_area.rect.y + text_area.rect.height;
     }
 
+    /// Try to insert the given bytes at the index indicated by `cursor_pos`.
     pub fn writeAtCursor(text_area: *TextArea, bytes: []const u8) !usize {
         try text_area.buffer.insertSlice(text_area.cursor_pos, bytes);
         text_area.cursor_pos += bytes.len;
@@ -115,11 +124,13 @@ pub const TextArea = struct {
         return .{ .context = text_area };
     }
 
+    /// Clear the text content.
     pub fn clear(text_area: *TextArea) void {
         text_area.buffer.items.len = 0;
         text_area.cursor_pos = 0;
     }
 
+    /// Moves the cursor one character to the right.
     pub fn moveCursorRight(text_area: *TextArea, span: usize) void {
         if (text_area.buffer.items.len == 0) return;
         text_area.cursor_pos += span;
@@ -128,6 +139,7 @@ pub const TextArea = struct {
         }
     }
 
+    /// Moves the cursor one character to the left.
     pub fn moveCursorLeft(text_area: *TextArea, span: usize) void {
         if (span > text_area.cursor_pos) {
             text_area.cursor_pos = 0;
@@ -136,6 +148,8 @@ pub const TextArea = struct {
         }
     }
 
+    /// Moves the cursor one line up, to a position in that line that is as far to the left as the cursor was
+    /// in its original line. If the cursor is already at the first line, do nothing.
     pub fn moveCursorUp(text_area: *TextArea, span: usize) void {
         var char_index: usize = text_area.cursor_pos;
         if (char_index == text_area.buffer.items.len) {
@@ -160,6 +174,8 @@ pub const TextArea = struct {
         text_area.cursor_pos = current_line_column;
     }
 
+    /// Moves the cursor one line down, to a position in that line that is as far to the left as the cursor was
+    /// in its original line. If the cursor is already at the last line, do nothing.
     pub fn moveCursorDown(text_area: *TextArea, span: usize) void {
         const current_line_column: usize = blk: {
             var nearest_newline_index: usize = text_area.cursor_pos;

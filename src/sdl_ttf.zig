@@ -13,6 +13,7 @@ pub const Font = struct {
     texture: sdl.Texture,
     glyphs: [GlyphCount]sdl.Rectangle,
 
+    /// Open the font at `font_file` and create a texture atlas for the needed glyphs.
     pub fn openFont(renderer: sdl.Renderer, font_file: []const u8, font_size: u8) !Font {
         const font_texture_size = 512;
 
@@ -66,6 +67,7 @@ pub const Font = struct {
         font.texture.destroy();
     }
 
+    /// Render `text` at `(x, y)` using the current font.
     pub fn drawText(font: Font, renderer: sdl.Renderer, text: []const u8, x: c_int, y: c_int) error{SdlError}!sdl.Rectangle {
         var result_rect = std.mem.zeroes(sdl.Rectangle);
         var render_x = x;
